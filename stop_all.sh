@@ -2,7 +2,7 @@
 
 ###############################################################################
 # FAST-LIVO 一键停止脚本
-# 直接通过进程名停止所有节点
+# 停止 Livox, RealSense, FAST-LIVO 所有节点
 ###############################################################################
 
 echo "=========================================="
@@ -15,26 +15,26 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 LOG_DIR="$SCRIPT_DIR/logs"
 
 # 停止 Livox 驱动
-echo "正在停止 Livox 驱动..."
-pkill -f "livox_ros_driver2" 2>/dev/null
+echo "正在停止 Livox Driver..."
+pkill -f "msg_MID360_launch" 2>/dev/null
 if [ $? -eq 0 ]; then
-    echo "✓ Livox 驱动已停止"
+    echo "✓ Livox Driver 已停止"
 else
-    echo "  Livox 驱动未运行"
+    echo "  Livox Driver 未运行"
 fi
 
 # 停止 RealSense 相机
-echo "正在停止 RealSense 相机..."
+echo "正在停止 RealSense Camera..."
 pkill -f "realsense2_camera" 2>/dev/null
 if [ $? -eq 0 ]; then
-    echo "✓ RealSense 相机已停止"
+    echo "✓ RealSense Camera 已停止"
 else
-    echo "  RealSense 相机未运行"
+    echo "  RealSense Camera 未运行"
 fi
 
 # 停止 FAST-LIVO
 echo "正在停止 FAST-LIVO..."
-pkill -f "fastlivo_mapping" 2>/dev/null
+pkill -f "mapping_mid360" 2>/dev/null
 if [ $? -eq 0 ]; then
     echo "✓ FAST-LIVO 已停止"
 else
@@ -47,17 +47,33 @@ echo "等待进程优雅退出..."
 sleep 2
 
 # 检查是否还有残留进程，如果有则强制停止
-REMAINING_LIVOX=$(pgrep -f "livox_ros_driver2" 2>/dev/null)
+REMAINING_LIVOX=$(pgrep -f "msg_MID360_launch" 2>/dev/null)
 REMAINING_RS=$(pgrep -f "realsense2_camera" 2>/dev/null)
-REMAINING_FL=$(pgrep -f "fastlivo_mapping" 2>/dev/null)
+REMAINING_FL=$(pgrep -f "mapping_mid360" 2>/dev/null)
 
 if [ -n "$REMAINING_LIVOX" ] || [ -n "$REMAINING_RS" ] || [ -n "$REMAINING_FL" ]; then
     echo ""
     echo "警告：仍有残留进程，正在强制停止..."
-    pkill -9 -f "livox_ros_driver2" 2>/dev/null
+    pkill -9 -f "msg_MID360_launch" 2>/dev/null
     pkill -9 -f "realsense2_camera" 2>/dev/null
-    pkill -9 -f "fastlivo_mapping" 2>/dev/null
+    pkill -9 -f "mapping_mid360" 2>/dev/null
     sleep 1
+fi
+
+# 清理临时启动脚本
+echo ""
+echo "清理临时启动脚本..."
+if [ -f "$SCRIPT_DIR/run_livox.sh" ]; then
+    rm "$SCRIPT_DIR/run_livox.sh"
+    echo "✓ 已删除 run_livox.sh"
+fi
+if [ -f "$SCRIPT_DIR/run_realsense.sh" ]; then
+    rm "$SCRIPT_DIR/run_realsense.sh"
+    echo "✓ 已删除 run_realsense.sh"
+fi
+if [ -f "$SCRIPT_DIR/run_livo.sh" ]; then
+    rm "$SCRIPT_DIR/run_livo.sh"
+    echo "✓ 已删除 run_livo.sh"
 fi
 
 echo ""

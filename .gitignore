@@ -46,3 +46,8 @@ Makefile
 *.tmp
 *.bak
 *.old
+
+# 临时启动脚本（由 start_all.sh 自动生成）
+run_livox.sh
+run_realsense.sh
+run_livo.sh
