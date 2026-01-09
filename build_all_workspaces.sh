@@ -308,13 +308,8 @@ build_workspace() {
     # 进入工作空间目录
     cd "$workspace_path"
     
-    # 清理旧的构建文件
-    log_info "清理旧的构建文件..."
-    rm -rf build install log
-    
-    # 创建目录和COLCON_IGNORE文件以忽略colcon警告
+    # 创建目录（如果不存在）
     mkdir -p build install log
-    touch build/COLCON_IGNORE install/COLCON_IGNORE log/COLCON_IGNORE
     
     # 编译
     log_info "开始编译..."
@@ -325,9 +320,6 @@ build_workspace() {
         source "$SCRIPT_DIR/livox_ws/install/setup.bash" 2>/dev/null || true
     fi
     
-    # 移除COLCON_IGNORE文件，让colcon可以正常编译
-    rm -f build/COLCON_IGNORE
-    
     if colcon build --symlink-install --continue-on-error; then
         log_success "工作空间 $workspace_name 编译成功!"
         # 返回原始目录
@@ -335,8 +327,6 @@ build_workspace() {
         return 0
     else
         log_error "工作空间 $workspace_name 编译失败!"
-        # 标记编译失败
-        touch build/COLCON_IGNORE
         # 返回原始目录
         cd "$current_dir"
         return 1
