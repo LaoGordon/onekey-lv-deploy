@@ -56,6 +56,65 @@ check_ros2() {
     return 0
 }
 
+# 检查并安装ROS2依赖包
+check_ros2_dependencies() {
+    log_info "检查ROS2依赖包..."
+    
+    local missing_packages=()
+    local ros_distro=${ROS_DISTRO:-humble}
+    
+    # 检查常用的ROS2依赖包
+    local packages=(
+        "pcl-ros"
+        "pcl-conversions"
+        "cv-bridge"
+        "sensor-msgs"
+        "geometry-msgs"
+        "nav-msgs"
+        "tf2-ros"
+        "tf2-geometry-msgs"
+        "xacro"
+    )
+    
+    for pkg in "${packages[@]}"; do
+        if ! dpkg -l | grep -q "ros-${ros_distro}-${pkg}"; then
+            missing_packages+=("ros-${ros_distro}-${pkg}")
+        else
+            log_success "${pkg} 已安装"
+        fi
+    done
+    
+    # 如果有缺失的包，询问是否安装
+    if [ ${#missing_packages[@]} -gt 0 ]; then
+        log_warning "发现 ${#missing_packages[@]} 个缺失的ROS2包:"
+        for pkg in "${missing_packages[@]}"; do
+            echo "  - $pkg"
+        done
+        echo ""
+        log_info "正在自动安装缺失的包..."
+        
+        # 更新包列表
+        if ! sudo apt update; then
+            log_error "apt update 失败！"
+            return 1
+        fi
+        
+        # 安装所有缺失的包
+        if sudo apt install -y "${missing_packages[@]}"; then
+            log_success "所有依赖包安装成功！"
+            return 0
+        else
+            log_error "依赖包安装失败！"
+            log_info "请手动运行以下命令安装:"
+            echo "  sudo apt install ${missing_packages[*]}"
+            return 1
+        fi
+    else
+        log_success "所有ROS2依赖包已安装"
+        return 0
+    fi
+}
+
 # 检查Sophus依赖
 check_sophus() {
     log_info "检查Sophus依赖..."
@@ -185,10 +244,38 @@ setup_livox_sdk() {
     fi
 }
 
+# 检查工作空间是否已经成功编译
+check_workspace_built() {
+    local workspace_path=$1
+    
+    # 检查install目录是否存在
+    if [ ! -d "$workspace_path/install" ]; then
+        return 1
+    fi
+    
+    # 检查install目录下是否有setup.bash
+    if [ ! -f "$workspace_path/install/setup.bash" ]; then
+        return 1
+    fi
+    
+    # 检查build目录是否存在
+    if [ ! -d "$workspace_path/build" ]; then
+        return 1
+    fi
+    
+    # 检查build目录下是否有COLCON_IGNORE文件（如果有说明之前的编译被标记为失败）
+    if [ -f "$workspace_path/build/COLCON_IGNORE" ]; then
+        return 1
+    fi
+    
+    return 0
+}
+
 # 清理并编译工作空间
 build_workspace() {
     local workspace_name=$1
     local workspace_path=$2
+    local force_rebuild=$3  # 可选参数：是否强制重新编译
     
     log_info "========================================"
     log_info "开始编译工作空间: $workspace_name"
@@ -205,6 +292,13 @@ build_workspace() {
     if [ ! -d "$workspace_path/src" ]; then
         log_error "src目录不存在: $workspace_path/src"
         return 1
+    fi
+    
+    # 检查是否已经编译成功，如果不是强制重新编译
+    if [ "$force_rebuild" != "true" ] && check_workspace_built "$workspace_path"; then
+        log_success "工作空间 $workspace_name 已编译，跳过编译"
+        log_info "如需重新编译，请使用 --rebuild 选项"
+        return 0
     fi
     
     # 保存当前目录
@@ -230,6 +324,9 @@ build_workspace() {
         source "$SCRIPT_DIR/livox_ws/install/setup.bash" 2>/dev/null || true
     fi
     
+    # 移除COLCON_IGNORE文件，让colcon可以正常编译
+    rm -f build/COLCON_IGNORE
+    
     if colcon build --symlink-install --continue-on-error; then
         log_success "工作空间 $workspace_name 编译成功!"
         # 返回原始目录
@@ -237,6 +334,8 @@ build_workspace() {
         return 0
     else
         log_error "工作空间 $workspace_name 编译失败!"
+        # 标记编译失败
+        touch build/COLCON_IGNORE
         # 返回原始目录
         cd "$current_dir"
         return 1
@@ -245,6 +344,14 @@ build_workspace() {
 
 # 主函数
 main() {
+    local force_rebuild=false
+    
+    # 检查是否传入 --rebuild 参数
+    if [ "$1" == "--rebuild" ]; then
+        force_rebuild=true
+        log_warning "强制重新编译模式已启用"
+    fi
+    
     echo -e "${GREEN}"
     echo "========================================"
     echo "  LV工作空间自动编译脚本"
@@ -262,6 +369,9 @@ main() {
     # 检查ROS2环境
     check_ros2 || exit 1
     
+    # 检查ROS2依赖包
+    check_ros2_dependencies || exit 1
+    
     # 检查Sophus依赖
     check_sophus || exit 1
     
@@ -271,6 +381,7 @@ main() {
     # 统计编译结果
     SUCCESS_COUNT=0
     FAILED_COUNT=0
+    SKIPPED_COUNT=0
     TOTAL_WORKSPACES=3
     
     # 编译三个工作空间（注意顺序：先编译依赖，再编译依赖它的包）
@@ -283,10 +394,20 @@ main() {
     for ws_info in "${WORKSPACES[@]}"; do
         IFS=':' read -r ws_name ws_path <<< "$ws_info"
         
-        if build_workspace "$ws_name" "$ws_path"; then
+        # 检查是否已编译
+        if [ "$force_rebuild" != "true" ] && check_workspace_built "$ws_path"; then
+            log_info "跳过已编译的工作空间: $ws_name"
+            ((SKIPPED_COUNT++))
+            echo ""
+            continue
+        fi
+        
+        if build_workspace "$ws_name" "$ws_path" "$force_rebuild"; then
             ((SUCCESS_COUNT++))
         else
             ((FAILED_COUNT++))
+            log_error "工作空间 $ws_name 编译失败，停止后续工作空间编译"
+            break
         fi
         echo ""
     done
@@ -305,6 +426,7 @@ main() {
     echo -e "${NC}"
     echo "总工作空间数: $TOTAL_WORKSPACES"
     echo -e "编译成功: ${GREEN}$SUCCESS_COUNT${NC}"
+    echo -e "跳过已编译: ${YELLOW}$SKIPPED_COUNT${NC}"
     echo -e "编译失败: ${RED}$FAILED_COUNT${NC}"
     echo "总耗时: ${MINUTES}分 ${SECONDS}秒"
     
@@ -320,9 +442,10 @@ main() {
     else
         echo ""
         log_error "部分工作空间编译失败，请检查错误信息"
+        log_info "提示：修复错误后重新运行脚本，会自动跳过已成功编译的工作空间"
         return 1
     fi
 }
 
 # 执行主函数
-main
+main "$@"
