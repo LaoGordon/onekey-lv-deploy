@@ -100,11 +100,37 @@ check_sophus() {
     fi
 }
 
+# 检查Livox-SDK2是否已安装
+check_livox_sdk_installed() {
+    # 检查关键文件是否存在
+    if [ -f "/usr/local/lib/liblivox_lidar_sdk_shared.so" ] && \
+       [ -f "/usr/local/include/livox_lidar_api.h" ] && \
+       [ -f "/usr/local/include/livox_lidar_def.h" ] && \
+       [ -f "/usr/local/include/livox_lidar_cfg.h" ]; then
+        return 0
+    fi
+    return 1
+}
+
 # 编译和安装Livox-SDK2
 setup_livox_sdk() {
     log_info "========================================"
-    log_info "编译和安装Livox-SDK2"
+    log_info "检查Livox-SDK2安装状态"
     log_info "========================================"
+    
+    # 检查是否已安装
+    if check_livox_sdk_installed; then
+        log_success "Livox-SDK2已安装，跳过编译和安装步骤"
+        log_info "检测到的文件:"
+        echo "  - /usr/local/lib/liblivox_lidar_sdk_shared.so"
+        echo "  - /usr/local/lib/liblivox_lidar_sdk_static.a"
+        echo "  - /usr/local/include/livox_lidar_api.h"
+        echo "  - /usr/local/include/livox_lidar_def.h"
+        echo "  - /usr/local/include/livox_lidar_cfg.h"
+        return 0
+    fi
+    
+    log_warning "Livox-SDK2未安装，开始编译和安装..."
     
     local livox_sdk_dir="$SCRIPT_DIR/Livox-SDK2"
     
@@ -147,7 +173,7 @@ setup_livox_sdk() {
     fi
     
     # 安装
-    log_info "安装Livox-SDK2..."
+    log_info "安装Livox-SDK2（需要sudo权限）..."
     if sudo make install; then
         log_success "Livox-SDK2安装成功!"
         cd "$current_dir"
