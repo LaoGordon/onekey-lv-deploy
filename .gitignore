@@ -1,0 +1,47 @@
+# ROS2工作空间编译产物
+**/build/
+**/install/
+**/log/
+
+# Livox-SDK2编译产物
+Livox-SDK2/build/
+Livox-SDK2/sdk_core/build/
+
+# 备份文件
+backups/
+*.tar.gz
+*.backup
+
+# 日志文件
+logs/
+*.log
+
+# IDE和编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# 临时文件
+*.tmp
+*.bak
+*.old
